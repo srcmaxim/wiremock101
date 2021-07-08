@@ -4,6 +4,7 @@ import static java.net.http.HttpResponse.BodySubscribers.mapping;
 import static java.net.http.HttpResponse.BodySubscribers.ofInputStream;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -23,12 +24,12 @@ public class WireMock {
   private final ObjectMapper mapper;
   private final HttpClient client;
   private final URI weatherService;
-  private final BodyHandler<Weather> weatherBody = ofJson(new TypeReference<>() {
-
-  });
-  private final BodyHandler<List<Weather>> listWeatherBody = ofJson(new TypeReference<>() {
-
-  });
+//  private final BodyHandler<Weather> weatherBody = ofJson(new TypeReference<>() {
+//
+//  });
+//  private final BodyHandler<List<Weather>> listWeatherBody = ofJson(new TypeReference<>() {
+//
+//  });
   private final Function<Long, HttpRequest> getWeatherId;
   private final HttpRequest getWeather;
 
@@ -47,19 +48,26 @@ public class WireMock {
   }
 
   public CompletableFuture<Response<List<Weather>>> getWeather() {
+    var listWeatherType = mapper.getTypeFactory().constructCollectionType(List.class, Weather.class);
+    BodyHandler<List<Weather>> listWeatherBody = ofJson(listWeatherType);
     return client.sendAsync(getWeather, listWeatherBody)
         .thenApply(Response::new);
   }
 
   public CompletableFuture<Response<Weather>> getWeather(Long id) {
+    var weatherType = mapper.getTypeFactory().constructType(Weather.class);
+    BodyHandler<Weather> weatherBody = ofJson(weatherType);
     return client.sendAsync(getWeatherId.apply(id), weatherBody)
         .thenApply(Response::new);
   }
 
-  private <T> BodyHandler<T> ofJson(Class<T> valueType) {
-    CollectionType collectionType = mapper.getTypeFactory()
-        .constructCollectionType(List.class, valueType);
-    Function<InputStream, T> ofType = tryFunction(content -> mapper.readValue(content, collectionType));
+  private <T> BodyHandler<T> ofJson(CollectionType valueType) {
+    Function<InputStream, T> ofType = tryFunction(content -> mapper.readValue(content, valueType));
+    return (responseInfo) -> mapping(ofInputStream(), ofType);
+  }
+
+  private <T> BodyHandler<T> ofJson(JavaType valueType) {
+    Function<InputStream, T> ofType = tryFunction(content -> mapper.readValue(content, valueType));
     return (responseInfo) -> mapping(ofInputStream(), ofType);
   }
 
